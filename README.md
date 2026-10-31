@@ -16,6 +16,8 @@ LockBit, REvil/Sodinokibi, Dharma/CrySiS, DarkSide, Conti, NetWalker, Babuk, Wan
 
 ## Usage
 
+### Command Line Interface (CLI)
+
 ```bash
 # Analyze a single file
 python ransom_id.py encrypted_file.docx.lockbit
@@ -26,6 +28,21 @@ python ransom_id.py /path/to/affected/folder
 # Analyze a ransom note specifically
 python ransom_id.py --note README_DECRYPT.txt
 ```
+
+### Graphical User Interface (GUI)
+
+Launch the interactive GUI application:
+
+```bash
+python ransom_id_gui.py
+```
+
+The GUI provides three tabs:
+- **📄 File Analysis** - Analyze a single encrypted file
+- **📁 Directory Scan** - Recursively scan a directory for affected files and ransom notes
+- **📝 Ransom Note** - Analyze ransom note content for family-specific signatures
+
+Features include browse dialogs, real-time results display, progress indicators, and detailed analysis output.
 
 ## How It Works
 
