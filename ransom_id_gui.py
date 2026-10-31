@@ -11,6 +11,12 @@ import re
 import threading
 from collections import defaultdict
 
+try:
+    from PIL import Image, ImageTk
+except ImportError:
+    Image = None
+    ImageTk = None
+
 # Import the core analysis functions from ransom_id.py
 try:
     from ransom_id import analyze_extension, analyze_ransom_note, check_file_magic, RANSOMWARE_DB, NOTE_SIGNATURES
@@ -32,7 +38,7 @@ except ImportError:
 class RansomwareIdentifierApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Emsys Anti-Ransomware Identifier")
+        self.root.title("Emsys | Anti-Ransomware Identifier")
         self.root.geometry("900x700")
         self.root.resizable(True, True)
         
@@ -40,11 +46,11 @@ class RansomwareIdentifierApp:
         self.style = ttk.Style()
         self.style.theme_use('clam')
         
-        # Configure colors
+        # Emsys brand colors (from logo analysis)
         bg_color = "#f0f0f0"
-        header_bg = "#2c3e50"
+        header_bg = "#30b090"  # Primary teal from Emsys logo
         header_fg = "white"
-        accent_color = "#3498db"
+        accent_color = "#30b090"  # Primary brand color
         success_color = "#27ae60"
         warning_color = "#f39c12"
         danger_color = "#e74c3c"
@@ -93,17 +99,36 @@ class RansomwareIdentifierApp:
         self.status_bar.pack(fill=tk.X, pady=(5, 0))
     
     def create_header(self, bg_color, fg_color):
-        """Create application header."""
+        """Create application header with logo."""
+        # Try to load and display Emsys logo
+        self.logo_image = None
+        try:
+            logo_path = os.path.join(os.path.dirname(__file__), "emsys_logo.png")
+            if os.path.exists(logo_path) and Image is not None:
+                img = Image.open(logo_path)
+                img = img.resize((40, 40), Image.Resampling.LANCZOS)
+                self.logo_image = ImageTk.PhotoImage(img)
+        except Exception:
+            pass
+        
         header_frame = ttk.Frame(self.container)
         header_frame.pack(fill=tk.X, pady=(0, 10))
         
-        title_label = ttk.Label(header_frame,
-                               text="🛡️ Emsys Anti-Ransomware Identifier",
+        # Header with logo and title
+        inner_frame = ttk.Frame(header_frame)
+        inner_frame.pack(fill=tk.X)
+        
+        if self.logo_image:
+            logo_label = ttk.Label(inner_frame, image=self.logo_image)
+            logo_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        title_label = ttk.Label(inner_frame,
+                               text="Emsys Anti-Ransomware Identifier",
                                style='Header.TLabel', anchor=tk.W)
-        title_label.pack(fill=tk.X, ipady=8)
+        title_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         subtitle = ttk.Label(self.container,
-                           text="Identify ransomware types from encrypted files and ransom notes",
+                           text="Powered by Emsys - Center for Data Recovery & Digital Forensics | emsys.ir",
                            style='Status.TLabel', anchor=tk.W)
         subtitle.pack(fill=tk.X, pady=(0, 5))
     
