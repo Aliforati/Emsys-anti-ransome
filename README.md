@@ -1,6 +1,6 @@
 "# Emsys Anti-Ransomware Identifier
 
-A command-line tool that examines input files to identify possible ransomware types. Uses extension matching, ransom note content analysis, and file signature detection.
+A cross-platform anti-ransomware identification system with both CLI and GUI interfaces. Examines encrypted files and ransom notes to identify the ransomware family using extension matching, content analysis, and file signature detection. Built with Python and Tkinter for a native-looking desktop experience.
 
 ## Features
 
