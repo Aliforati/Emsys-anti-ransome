@@ -9,7 +9,6 @@ A command-line tool that examines input files to identify possible ransomware ty
 - **File Signature Detection**: Checks magic bytes and entropy to detect encrypted files
 - **Directory Scanning**: Recursively scans directories for affected files and ransom notes
 - **Decryptor Links**: Provides links to relevant decryption tools and resources
-- **Modern GUI**: Sleek, dark-themed interface built with CustomTkinter featuring Emsys brand styling
 
 ## Screenshots
 

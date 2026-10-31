@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 """
-Emsys Anti-Ransomware Identifier - Modern GUI Version
-A sleek, modern graphical interface for identifying ransomware types.
-Uses CustomTkinter for a contemporary flat design aesthetic.
+Emsys Anti-Ransomware Identifier - GUI Version
+A graphical interface for identifying ransomware types from files and directories.
 """
 
-import customtkinter as ctk
-from tkinter import filedialog, messagebox
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox, scrolledtext
 import os
+import re
 import threading
 from collections import defaultdict
+
+try:
+    from PIL import Image, ImageTk
+except ImportError:
+    Image = None
+    ImageTk = None
 
 # Import the core analysis functions from ransom_id.py
 try:
     from ransom_id import analyze_extension, analyze_ransom_note, check_file_magic, RANSOMWARE_DB, NOTE_SIGNATURES
 except ImportError:
+    # Fallback if running standalone - include minimal database
     RANSOMWARE_DB = {}
     NOTE_SIGNATURES = {}
 
@@ -28,382 +35,190 @@ except ImportError:
         return None
 
 
-# Emsys brand colors
-EMSYS_TEAL = "#30b090"
-EMSYS_DARK = "#2c3e50"
-EMSYS_LIGHT = "#f8f9fa"
-EMSYS_CARD = "#ffffff"
-EMSYS_BORDER = "#e9ecef"
-EMSYS_TEXT = "#495057"
-EMSYS_SUCCESS = "#2ecc71"
-EMSYS_WARNING = "#f39c12"
-EMSYS_DANGER = "#e74c3c"
-EMSYS_INFO = "#3498db"
-
-
-class RansomwareIdentifierApp(ctk.CTk):
-    def __init__(self, initial_tab=0):
-        super().__init__()
+class RansomwareIdentifierApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Emsys | Anti-Ransomware Identifier")
+        self.root.geometry("900x700")
+        self.root.resizable(True, True)
         
-        # Configure app appearance
-        ctk.set_appearance_mode("light")
-        ctk.set_default_color_theme("blue")
+        # Style configuration
+        self.style = ttk.Style()
+        self.style.theme_use('clam')
         
-        self.title("Emsys | Anti-Ransomware Identifier")
-        self.geometry("1000x750")
-        self.minsize(800, 600)
+        # Emsys brand colors (from logo analysis)
+        bg_color = "#f0f0f0"
+        header_bg = "#30b090"  # Primary teal from Emsys logo
+        header_fg = "white"
+        accent_color = "#30b090"  # Primary brand color
+        success_color = "#27ae60"
+        warning_color = "#f39c12"
+        danger_color = "#e74c3c"
         
-        # Configure colors
-        self.configure(fg_color=EMSYS_LIGHT)
+        self.style.configure('TFrame', background=bg_color)
+        self.style.configure('Header.TLabel', font=('Segoe UI', 16, 'bold'),
+                           foreground=header_fg, background=header_bg)
+        self.style.configure('SubHeader.TLabel', font=('Segoe UI', 12, 'bold'),
+                           foreground="#34495e", background=bg_color)
+        self.style.configure('Result.TLabel', font=('Segoe UI', 10))
+        self.style.configure('Status.TLabel', font=('Segoe UI', 9, 'italic'),
+                           foreground="#7f8c8d", background=bg_color)
+        self.style.configure('Accent.TButton', font=('Segoe UI', 10, 'bold'),
+                           foreground="white", background=accent_color)
         
-        # Create layout
-        self.create_header()
-        self.create_main_content(initial_tab)
-        self.create_status_bar()
+        # Create main container
+        self.container = ttk.Frame(root, padding=10)
+        self.container.pack(fill=tk.BOTH, expand=True)
+        
+        # Header
+        self.create_header(header_bg, header_fg)
+        
+        # Main content area with tabs
+        self.notebook = ttk.Notebook(self.container)
+        self.notebook.pack(fill=tk.BOTH, expand=True, pady=10)
+        
+        # Tab 1: Single File Analysis
+        self.file_tab = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(self.file_tab, text="📄 File Analysis")
+        self.create_file_analysis_tab()
+        
+        # Tab 2: Directory Scan
+        self.dir_tab = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(self.dir_tab, text="📁 Directory Scan")
+        self.create_directory_scan_tab()
+        
+        # Tab 3: Ransom Note Analyzer
+        self.note_tab = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(self.note_tab, text="📝 Ransom Note")
+        self.create_ransom_note_tab()
+        
+        # Status bar
+        self.status_bar = ttk.Label(self.container,
+                                   text="Ready - Select a file or directory to analyze",
+                                   style='Status.TLabel', anchor=tk.W)
+        self.status_bar.pack(fill=tk.X, pady=(5, 0))
     
-    def create_header(self):
-        """Create modern header with logo and title."""
-        header = ctk.CTkFrame(self, height=80, corner_radius=0, fg_color=EMSYS_TEAL)
-        header.pack(fill="x", padx=0, pady=0)
+    def create_header(self, bg_color, fg_color):
+        """Create application header with logo."""
+        # Try to load and display Emsys logo
+        self.logo_image = None
+        try:
+            logo_path = os.path.join(os.path.dirname(__file__), "emsys_logo.png")
+            if os.path.exists(logo_path) and Image is not None:
+                img = Image.open(logo_path)
+                img = img.resize((40, 40), Image.Resampling.LANCZOS)
+                self.logo_image = ImageTk.PhotoImage(img)
+        except Exception:
+            pass
         
-        # Logo placeholder (circle with E)
-        logo_frame = ctk.CTkFrame(header, width=50, height=50, corner_radius=25,
-                                 fg_color="white")
-        logo_frame.pack(side="left", padx=20, pady=15)
+        header_frame = ttk.Frame(self.container)
+        header_frame.pack(fill=tk.X, pady=(0, 10))
         
-        logo_label = ctk.CTkLabel(logo_frame, text="E", font=ctk.CTkFont(
-            size=24, weight="bold"), text_color=EMSYS_TEAL)
-        logo_label.pack()
+        # Header with logo and title
+        inner_frame = ttk.Frame(header_frame)
+        inner_frame.pack(fill=tk.X)
         
-        # Title and subtitle
-        title_frame = ctk.CTkFrame(header, fg_color="transparent")
-        title_frame.pack(side="left", padx=10)
+        if self.logo_image:
+            logo_label = ttk.Label(inner_frame, image=self.logo_image)
+            logo_label.pack(side=tk.LEFT, padx=(0, 10))
         
-        title = ctk.CTkLabel(title_frame, text="Emsys Anti-Ransomware Identifier",
-                           font=ctk.CTkFont(size=20, weight="bold"),
-                           text_color="white")
-        title.pack(anchor="w")
+        title_label = ttk.Label(inner_frame,
+                               text="Emsys Anti-Ransomware Identifier",
+                               style='Header.TLabel', anchor=tk.W)
+        title_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        subtitle = ctk.CTkLabel(title_frame,
-                               text="Powered by Emsys - Center for Data Recovery & Digital Forensics | emsys.ir",
-                               font=ctk.CTkFont(size=10),
-                               text_color="#d5f5e3")
-        subtitle.pack(anchor="w")
-    
-    def create_main_content(self, initial_tab):
-        """Create tabbed main content area."""
-        # Tab container with rounded corners
-        tab_container = ctk.CTkFrame(self, corner_radius=12, fg_color=EMSYS_CARD)
-        tab_container.pack(fill="both", expand=True, padx=20, pady=15)
-        
-        # Custom tab buttons (modern pill-style tabs)
-        tab_buttons_frame = ctk.CTkFrame(tab_container, fg_color=EMSYS_LIGHT,
-                                        corner_radius=12)
-        tab_buttons_frame.pack(fill="x")
-        
-        self.tab_buttons = []
-        tab_names = ["📄 File Analysis", "📁 Directory Scan", "📝 Ransom Note"]
-        
-        for i, name in enumerate(tab_names):
-            btn = ctk.CTkButton(
-                tab_buttons_frame,
-                text=name,
-                font=ctk.CTkFont(size=13, weight="bold"),
-                corner_radius=20,
-                fg_color="transparent",
-                hover_color="#e8f5e9",
-                text_color=EMSYS_TEXT,
-                command=lambda idx=i: self.switch_tab(idx)
-            )
-            btn.pack(side="left", padx=10, pady=10)
-            self.tab_buttons.append(btn)
-        
-        # Highlight initial tab
-        self.switch_tab(initial_tab)
-        
-        # Tab content area
-        self.content_frame = ctk.CTkFrame(tab_container, fg_color=EMSYS_CARD,
-                                         corner_radius=(0, 0, 12, 12))
-        self.content_frame.pack(fill="both", expand=True, padx=15, pady=10)
-        
-        # Create tab content
-        self.file_tab_content = self.create_file_analysis_tab()
-        self.dir_tab_content = self.create_directory_scan_tab()
-        self.note_tab_content = self.create_ransom_note_tab()
-    
-    def switch_tab(self, index):
-        """Switch between tabs."""
-        # Update button styles
-        for i, btn in enumerate(self.tab_buttons):
-            if i == index:
-                btn.configure(fg_color=EMSYS_TEAL, text_color="white")
-            else:
-                btn.configure(fg_color="transparent", text_color=EMSYS_TEXT)
-        
-        # Clear content frame
-        for widget in self.content_frame.winfo_children():
-            widget.destroy()
-        
-        # Show selected tab
-        if index == 0:
-            self.file_tab_content.pack(fill="both", expand=True, padx=15, pady=15)
-        elif index == 1:
-            self.dir_tab_content.pack(fill="both", expand=True, padx=15, pady=15)
-        else:
-            self.note_tab_content.pack(fill="both", expand=True, padx=15, pady=15)
+        subtitle = ttk.Label(self.container,
+                           text="Powered by Emsys - Center for Data Recovery & Digital Forensics | emsys.ir",
+                           style='Status.TLabel', anchor=tk.W)
+        subtitle.pack(fill=tk.X, pady=(0, 5))
     
     def create_file_analysis_tab(self):
-        """Create modern file analysis tab."""
-        container = ctk.CTkFrame(ctk.CTkFrame(), fg_color="transparent")
+        """Create single file analysis tab."""
+        # File selection frame
+        select_frame = ttk.LabelFrame(self.file_tab, text="Select Encrypted File", padding=10)
+        select_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # Section title
-        title = ctk.CTkLabel(container, text="Analyze Encrypted File",
-                           font=ctk.CTkFont(size=18, weight="bold"),
-                           text_color=EMSYS_DARK)
-        title.pack(anchor="w", pady=(0, 5))
+        self.file_path_var = tk.StringVar()
+        file_entry = ttk.Entry(select_frame, textvariable=self.file_path_var, state='readonly')
+        file_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
-        desc = ctk.CTkLabel(container, text="Select an encrypted file to identify the ransomware family",
-                          font=ctk.CTkFont(size=12), text_color="#7f8c8d")
-        desc.pack(anchor="w", pady=(0, 15))
+        browse_btn = ttk.Button(select_frame, text="Browse...", command=self.browse_file)
+        browse_btn.pack(side=tk.RIGHT)
         
-        # File selection card
-        select_card = ctk.CTkFrame(container, corner_radius=10, fg_color=EMSYS_LIGHT)
-        select_card.pack(fill="x", pady=(0, 10))
+        analyze_btn = ttk.Button(self.file_tab, text="🔍 Analyze File",
+                                command=self.analyze_single_file,
+                                style='Accent.TButton')
+        analyze_btn.pack(fill=tk.X, pady=(0, 10))
         
-        self.file_path_var = ctk.StringVar()
-        file_entry = ctk.CTkEntry(
-            select_card,
-            textvariable=self.file_path_var,
-            placeholder_text="Select an encrypted file...",
-            font=ctk.CTkFont(size=12),
-            corner_radius=8,
-            fg_color="white"
-        )
-        file_entry.pack(side="left", fill="x", expand=True, padx=15, pady=10)
+        # Results frame
+        results_frame = ttk.LabelFrame(self.file_tab, text="Analysis Results", padding=10)
+        results_frame.pack(fill=tk.BOTH, expand=True)
         
-        browse_btn = ctk.CTkButton(
-            select_card,
-            text="Browse",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            corner_radius=8,
-            fg_color=EMSYS_TEAL,
-            hover_color="#27a385",
-            command=self.browse_file
-        )
-        browse_btn.pack(side="right", padx=10, pady=10)
-        
-        # Analyze button
-        analyze_btn = ctk.CTkButton(
-            container,
-            text="🔍 Analyze File",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            corner_radius=10,
-            fg_color=EMSYS_TEAL,
-            hover_color="#27a385",
-            command=self.analyze_single_file
-        )
-        analyze_btn.pack(fill="x", pady=(0, 15))
-        
-        # Results card
-        results_card = ctk.CTkFrame(container, corner_radius=10,
-                                  fg_color="#f8f9fa", border_width=1,
-                                  border_color=EMSYS_BORDER)
-        results_card.pack(fill="both", expand=True)
-        
-        results_title = ctk.CTkLabel(
-            results_card,
-            text="Analysis Results",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=EMSYS_DARK
-        )
-        results_title.pack(anchor="w", padx=15, pady=(10, 5))
-        
-        self.file_results_text = ctk.CTkTextbox(
-            results_card,
-            font=ctk.CTkFont(family="Consolas", size=11),
-            corner_radius=8,
-            fg_color="white",
-            border_width=0
-        )
-        self.file_results_text.pack(fill="both", expand=True, padx=15, pady=(0, 15))
-        
-        return container
+        self.file_results_text = scrolledtext.ScrolledText(results_frame,
+                                                          wrap=tk.WORD,
+                                                          font=('Consolas', 10),
+                                                          state='disabled')
+        self.file_results_text.pack(fill=tk.BOTH, expand=True)
     
     def create_directory_scan_tab(self):
-        """Create modern directory scan tab."""
-        container = ctk.CTkFrame(ctk.CTkFrame(), fg_color="transparent")
+        """Create directory scan tab."""
+        # Directory selection frame
+        select_frame = ttk.LabelFrame(self.dir_tab, text="Select Directory to Scan", padding=10)
+        select_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # Section title
-        title = ctk.CTkLabel(container, text="Scan Directory",
-                           font=ctk.CTkFont(size=18, weight="bold"),
-                           text_color=EMSYS_DARK)
-        title.pack(anchor="w", pady=(0, 5))
+        self.dir_path_var = tk.StringVar()
+        dir_entry = ttk.Entry(select_frame, textvariable=self.dir_path_var, state='readonly')
+        dir_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
-        desc = ctk.CTkLabel(container,
-                          text="Recursively scan a directory for encrypted files and ransom notes",
-                          font=ctk.CTkFont(size=12), text_color="#7f8c8d")
-        desc.pack(anchor="w", pady=(0, 15))
+        browse_btn = ttk.Button(select_frame, text="Browse...", command=self.browse_directory)
+        browse_btn.pack(side=tk.RIGHT)
         
-        # Directory selection card
-        select_card = ctk.CTkFrame(container, corner_radius=10, fg_color=EMSYS_LIGHT)
-        select_card.pack(fill="x", pady=(0, 10))
-        
-        self.dir_path_var = ctk.StringVar()
-        dir_entry = ctk.CTkEntry(
-            select_card,
-            textvariable=self.dir_path_var,
-            placeholder_text="Select a directory to scan...",
-            font=ctk.CTkFont(size=12),
-            corner_radius=8,
-            fg_color="white"
-        )
-        dir_entry.pack(side="left", fill="x", expand=True, padx=15, pady=10)
-        
-        browse_btn = ctk.CTkButton(
-            select_card,
-            text="Browse",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            corner_radius=8,
-            fg_color=EMSYS_TEAL,
-            hover_color="#27a385",
-            command=self.browse_directory
-        )
-        browse_btn.pack(side="right", padx=10, pady=10)
-        
-        # Scan button
-        scan_btn = ctk.CTkButton(
-            container,
-            text="📊 Scan Directory",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            corner_radius=10,
-            fg_color=EMSYS_TEAL,
-            hover_color="#27a385",
-            command=self.scan_directory
-        )
-        scan_btn.pack(fill="x", pady=(0, 10))
+        scan_btn = ttk.Button(self.dir_tab, text="📊 Scan Directory",
+                             command=self.scan_directory,
+                             style='Accent.TButton')
+        scan_btn.pack(fill=tk.X, pady=(0, 10))
         
         # Progress bar
-        self.progress = ctk.CTkProgressBar(container, mode="indeterminate",
-                                          corner_radius=8)
-        self.progress.pack(fill="x", pady=(0, 15))
-        self.progress.hide()
+        self.progress = ttk.Progressbar(self.dir_tab, mode='indeterminate')
+        self.progress.pack(fill=tk.X, pady=5)
         
-        # Results card
-        results_card = ctk.CTkFrame(container, corner_radius=10,
-                                  fg_color="#f8f9fa", border_width=1,
-                                  border_color=EMSYS_BORDER)
-        results_card.pack(fill="both", expand=True)
+        # Results frame
+        results_frame = ttk.LabelFrame(self.dir_tab, text="Scan Results", padding=10)
+        results_frame.pack(fill=tk.BOTH, expand=True)
         
-        results_title = ctk.CTkLabel(
-            results_card,
-            text="Scan Results",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=EMSYS_DARK
-        )
-        results_title.pack(anchor="w", padx=15, pady=(10, 5))
-        
-        self.dir_results_text = ctk.CTkTextbox(
-            results_card,
-            font=ctk.CTkFont(family="Consolas", size=11),
-            corner_radius=8,
-            fg_color="white",
-            border_width=0
-        )
-        self.dir_results_text.pack(fill="both", expand=True, padx=15, pady=(0, 15))
-        
-        return container
+        self.dir_results_text = scrolledtext.ScrolledText(results_frame,
+                                                         wrap=tk.WORD,
+                                                         font=('Consolas', 10),
+                                                         state='disabled')
+        self.dir_results_text.pack(fill=tk.BOTH, expand=True)
     
     def create_ransom_note_tab(self):
-        """Create modern ransom note analyzer tab."""
-        container = ctk.CTkFrame(ctk.CTkFrame(), fg_color="transparent")
+        """Create ransom note analyzer tab."""
+        # Note selection frame
+        select_frame = ttk.LabelFrame(self.note_tab, text="Select Ransom Note", padding=10)
+        select_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # Section title
-        title = ctk.CTkLabel(container, text="Analyze Ransom Note",
-                           font=ctk.CTkFont(size=18, weight="bold"),
-                           text_color=EMSYS_DARK)
-        title.pack(anchor="w", pady=(0, 5))
+        self.note_path_var = tk.StringVar()
+        note_entry = ttk.Entry(select_frame, textvariable=self.note_path_var, state='readonly')
+        note_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
-        desc = ctk.CTkLabel(container,
-                          text="Upload a ransom note to identify the ransomware family",
-                          font=ctk.CTkFont(size=12), text_color="#7f8c8d")
-        desc.pack(anchor="w", pady=(0, 15))
+        browse_btn = ttk.Button(select_frame, text="Browse...", command=self.browse_ransom_note)
+        browse_btn.pack(side=tk.RIGHT)
         
-        # Note selection card
-        select_card = ctk.CTkFrame(container, corner_radius=10, fg_color=EMSYS_LIGHT)
-        select_card.pack(fill="x", pady=(0, 10))
+        analyze_btn = ttk.Button(self.note_tab, text="🔎 Analyze Note",
+                                command=self.analyze_ransom_note_file,
+                                style='Accent.TButton')
+        analyze_btn.pack(fill=tk.X, pady=(0, 10))
         
-        self.note_path_var = ctk.StringVar()
-        note_entry = ctk.CTkEntry(
-            select_card,
-            textvariable=self.note_path_var,
-            placeholder_text="Select a ransom note file...",
-            font=ctk.CTkFont(size=12),
-            corner_radius=8,
-            fg_color="white"
-        )
-        note_entry.pack(side="left", fill="x", expand=True, padx=15, pady=10)
+        # Results frame
+        results_frame = ttk.LabelFrame(self.note_tab, text="Note Analysis Results", padding=10)
+        results_frame.pack(fill=tk.BOTH, expand=True)
         
-        browse_btn = ctk.CTkButton(
-            select_card,
-            text="Browse",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            corner_radius=8,
-            fg_color=EMSYS_TEAL,
-            hover_color="#27a385",
-            command=self.browse_ransom_note
-        )
-        browse_btn.pack(side="right", padx=10, pady=10)
-        
-        # Analyze button
-        analyze_btn = ctk.CTkButton(
-            container,
-            text="🔎 Analyze Note",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            corner_radius=10,
-            fg_color=EMSYS_TEAL,
-            hover_color="#27a385",
-            command=self.analyze_ransom_note_file
-        )
-        analyze_btn.pack(fill="x", pady=(0, 15))
-        
-        # Results card
-        results_card = ctk.CTkFrame(container, corner_radius=10,
-                                  fg_color="#f8f9fa", border_width=1,
-                                  border_color=EMSYS_BORDER)
-        results_card.pack(fill="both", expand=True)
-        
-        results_title = ctk.CTkLabel(
-            results_card,
-            text="Note Analysis Results",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            text_color=EMSYS_DARK
-        )
-        results_title.pack(anchor="w", padx=15, pady=(10, 5))
-        
-        self.note_results_text = ctk.CTkTextbox(
-            results_card,
-            font=ctk.CTkFont(family="Consolas", size=11),
-            corner_radius=8,
-            fg_color="white",
-            border_width=0
-        )
-        self.note_results_text.pack(fill="both", expand=True, padx=15, pady=(0, 15))
-        
-        return container
-    
-    def create_status_bar(self):
-        """Create modern status bar."""
-        status = ctk.CTkFrame(self, height=35, corner_radius=0,
-                            fg_color=EMSYS_DARK)
-        status.pack(fill="x", side="bottom")
-        
-        self.status_label = ctk.CTkLabel(
-            status,
-            text="Ready - Select a file or directory to analyze",
-            font=ctk.CTkFont(size=11),
-            text_color="#ecf0f1"
-        )
-        self.status_label.pack(side="left", padx=15, pady=8)
+        self.note_results_text = scrolledtext.ScrolledText(results_frame,
+                                                          wrap=tk.WORD,
+                                                          font=('Consolas', 10),
+                                                          state='disabled')
+        self.note_results_text.pack(fill=tk.BOTH, expand=True)
     
     def browse_file(self):
         """Open file browser dialog."""
@@ -439,6 +254,7 @@ class RansomwareIdentifierApp(ctk.CTk):
         self.set_status(f"Analyzing: {os.path.basename(filepath)}")
         self.clear_text(self.file_results_text)
         
+        # Run analysis in separate thread
         thread = threading.Thread(target=self._analyze_file_thread, args=(filepath,))
         thread.daemon = True
         thread.start()
@@ -447,10 +263,12 @@ class RansomwareIdentifierApp(ctk.CTk):
         """Thread-safe file analysis."""
         results = []
         
+        # Extension analysis
         ext_result = analyze_extension(filepath)
         if ext_result:
             for family, variant, url in ext_result:
-                self.append_text(self.file_results_text, f"✅ EXTENSION MATCH: {family}")
+                self.append_text(self.file_results_text,
+                               f"✅ EXTENSION MATCH: {family}")
                 if variant:
                     self.append_text(self.file_results_text, f"   Variant: {variant}")
                 self.append_text(self.file_results_text, f"   Decryptor info: {url}")
@@ -458,12 +276,14 @@ class RansomwareIdentifierApp(ctk.CTk):
         else:
             self.append_text(self.file_results_text, "❌ No ransomware extension match found")
         
+        # Magic bytes check
         magic_result = check_file_magic(filepath)
         if magic_result:
             self.append_text(self.file_results_text, f"\n🔐 FILE SIGNATURE: {magic_result}")
         else:
             self.append_text(self.file_results_text, "\n📄 No special file signature detected")
         
+        # File info
         try:
             size = os.path.getsize(filepath)
             self.append_text(self.file_results_text, f"\n📊 File size: {size:,} bytes")
@@ -485,9 +305,9 @@ class RansomwareIdentifierApp(ctk.CTk):
         
         self.set_status(f"Scanning: {dirpath}")
         self.clear_text(self.dir_results_text)
-        self.progress.appear()
         self.progress.start()
         
+        # Run scan in separate thread
         thread = threading.Thread(target=self._scan_directory_thread, args=(dirpath,))
         thread.daemon = True
         thread.start()
@@ -507,12 +327,14 @@ class RansomwareIdentifierApp(ctk.CTk):
                 filepath = os.path.join(root, filename)
                 total_files += 1
                 
+                # Check extension
                 ext_result = analyze_extension(filename)
                 if ext_result:
                     suspicious_files += 1
                     for family, variant, url in ext_result:
                         extensions_found[(family, variant)].append(filepath)
                 
+                # Check for ransom notes
                 note_names = ['readme', 'decrypt', 'ransom', 'how_to', 'instructions', 'help']
                 base_name = os.path.splitext(filename)[0].lower()
                 if any(base_name == name or base_name.startswith(name + '_') for name in note_names):
@@ -523,6 +345,7 @@ class RansomwareIdentifierApp(ctk.CTk):
         self.append_text(self.dir_results_text, f"\nTotal files scanned: {total_files}")
         self.append_text(self.dir_results_text, f"Suspicious files found: {suspicious_files}")
         
+        # Report extension matches
         if extensions_found:
             self.append_text(self.dir_results_text, "\n" + "=" * 60)
             self.append_text(self.dir_results_text, "RANSOMWARE IDENTIFICATION RESULTS")
@@ -533,11 +356,13 @@ class RansomwareIdentifierApp(ctk.CTk):
                 if variant:
                     self.append_text(self.dir_results_text, f"   Variant: {variant}")
                 self.append_text(self.dir_results_text, f"   Files affected: {len(files)}")
+                # Show first few files
                 for f in files[:3]:
                     self.append_text(self.dir_results_text, f"     - {f}")
                 if len(files) > 3:
                     self.append_text(self.dir_results_text, f"     ... and {len(files) - 3} more")
         
+        # Analyze ransom notes
         if ransom_notes:
             self.append_text(self.dir_results_text, "\n" + "=" * 60)
             self.append_text(self.dir_results_text, "RANSOM NOTE ANALYSIS")
@@ -557,7 +382,6 @@ class RansomwareIdentifierApp(ctk.CTk):
             self.append_text(self.dir_results_text, "\n✅ No ransomware indicators found in this directory.")
         
         self.progress.stop()
-        self.progress.hide()
         self.set_status("Directory scan complete")
     
     def analyze_ransom_note_file(self):
@@ -582,13 +406,15 @@ class RansomwareIdentifierApp(ctk.CTk):
         matches = analyze_ransom_note(filepath)
         if matches:
             for family, keyword in matches:
-                self.append_text(self.note_results_text, f"\n✅ MATCH: {family}")
+                self.append_text(self.note_results_text,
+                               f"\n✅ MATCH: {family}")
                 self.append_text(self.note_results_text, f"   Keyword found: {keyword}")
         else:
             self.append_text(self.note_results_text, "\n❌ No known ransomware signatures found in note.")
             self.append_text(self.note_results_text, "\n💡 Try uploading to NoMoreRansom.org's Crypto Sheriff tool:")
             self.append_text(self.note_results_text, "   https://nomoreransom.org/crypto-sheriff/")
         
+        # Show note preview
         try:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read(500)
@@ -602,34 +428,45 @@ class RansomwareIdentifierApp(ctk.CTk):
     
     def set_status(self, message):
         """Update status bar."""
-        self.status_label.configure(text=message)
+        self.status_bar.config(text=message)
     
     def clear_text(self, text_widget):
         """Clear text widget content."""
-        text_widget.delete("1.0", "end")
+        text_widget.config(state='normal')
+        text_widget.delete(1.0, tk.END)
+        text_widget.config(state='disabled')
     
     def append_text(self, text_widget, text):
         """Append text to text widget (thread-safe)."""
-        self.after(0, self._append_text_internal, text_widget, text)
+        self.root.after(0, self._append_text_internal, text_widget, text)
     
     def _append_text_internal(self, text_widget, text):
         """Internal thread-safe text appending."""
-        text_widget.insert("end", text + "\n")
-        text_widget.see("end")
+        text_widget.config(state='normal')
+        text_widget.insert(tk.END, text + "\n")
+        text_widget.see(tk.END)
+        text_widget.config(state='disabled')
 
 
 def main():
     import sys
     
-    initial_tab = 0
+    # Check for tab selection argument
+    initial_tab = 0  # Default: File Analysis
     if len(sys.argv) > 1:
         try:
             initial_tab = int(sys.argv[1])
         except ValueError:
             pass
     
-    app = RansomwareIdentifierApp(initial_tab)
-    app.mainloop()
+    root = tk.Tk()
+    app = RansomwareIdentifierApp(root)
+    
+    # Select initial tab if specified
+    if initial_tab > 0 and initial_tab < 3:
+        app.notebook.select(initial_tab)
+    
+    root.mainloop()
 
 
 if __name__ == "__main__":
