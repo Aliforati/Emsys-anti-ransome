@@ -449,8 +449,23 @@ class RansomwareIdentifierApp:
 
 
 def main():
+    import sys
+    
+    # Check for tab selection argument
+    initial_tab = 0  # Default: File Analysis
+    if len(sys.argv) > 1:
+        try:
+            initial_tab = int(sys.argv[1])
+        except ValueError:
+            pass
+    
     root = tk.Tk()
     app = RansomwareIdentifierApp(root)
+    
+    # Select initial tab if specified
+    if initial_tab > 0 and initial_tab < 3:
+        app.notebook.select(initial_tab)
+    
     root.mainloop()
 
 

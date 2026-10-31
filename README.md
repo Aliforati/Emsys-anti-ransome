@@ -10,6 +10,23 @@ A command-line tool that examines input files to identify possible ransomware ty
 - **Directory Scanning**: Recursively scans directories for affected files and ransom notes
 - **Decryptor Links**: Provides links to relevant decryption tools and resources
 
+## Screenshots
+
+### File Analysis Tab
+Analyze a single encrypted file to identify the ransomware family.
+
+![File Analysis](screenshots/screenshot_file_analysis.png)
+
+### Directory Scan Tab
+Recursively scan directories for affected files and automatically detect ransom notes.
+
+![Directory Scan](screenshots/screenshot_directory_scan.png)
+
+### Ransom Note Analyzer Tab
+Analyze ransom note content for family-specific signatures and keywords.
+
+![Ransom Note](screenshots/screenshot_ransom_note.png)
+
 ## Supported Ransomware Families
 
 LockBit, REvil/Sodinokibi, Dharma/CrySiS, DarkSide, Conti, NetWalker, Babuk, WannaCry, Petya/NotPetya, GoldenEye, CryptoLocker, GandCrab, STOP/DjVu, Phobos, 8-Base, The Gentlemen, Beelzebub, and more.
